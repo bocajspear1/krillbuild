@@ -10,6 +10,10 @@ logger = logging.getLogger('krillbuild')
 
 class KrillPlugin():
 
+    @property
+    def name(self):
+        return self.__class__.__name__
+
     def build_container(self, dockerfile_content, image_name):
         runner = get_runner()
 

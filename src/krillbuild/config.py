@@ -7,7 +7,7 @@ class Config():
 
     def __init__(self, config_path="./krill.ini"):
         parser = configparser.ConfigParser()
-        data = parser.read(config_path)
+        parser.read(config_path)
 
         logger.info("Loading configuration")
 

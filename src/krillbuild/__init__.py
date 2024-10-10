@@ -5,16 +5,21 @@ import os
 logger = logging.getLogger('krillbuild')
 
 from krillbuild.config import Config
-from krillbuild.compile import KrillCompile
+from krillbuild.compile import KrillBuild
 from krillbuild.project import KrillProject
 from krillbuild.language_loader import KrillLanguages
 from krillbuild.mod_loader import KrillMods
+from krillbuild.compiler_loader import KrillCompilers
 
 @click.group()
 @click.option('--debug', is_flag=True, default=False)
 def cli(debug):
+    if os.getenv("KRILL_PROJECT"):
+        log_path = os.path.join(os.getenv("KRILL_PROJECT"), "krillbuild.log")
+    else:
+        log_path = "krillbuild.log"
     handlers = [
-        logging.FileHandler("krillbuild.log"),
+        logging.FileHandler(log_path),
         logging.StreamHandler()
     ]
     if debug:
@@ -23,12 +28,15 @@ def cli(debug):
         logging.basicConfig(level=logging.INFO, handlers=handlers)
 
 @click.command()
-@click.argument('language')
+@click.argument('compiler')
 @click.argument('arch')
-def langbuild(language, arch):
-    lang_loader = KrillLanguages()
-    language = lang_loader.get_language(language)
-    language.build(arch)
+def compilerbuild(compiler, arch):
+    if arch is None:
+        print("Must set an architecture first")
+        return
+    compiler_load = KrillCompilers()
+    compiler_plugin = compiler_load.get_compiler(compiler)
+    compiler_plugin.build(arch)
 
 @click.command()
 @click.argument('mod')
@@ -46,18 +54,24 @@ def prebuild():
 def postbuild():
     click.echo('Do the postbuilding')
 
+
 @click.command(context_settings={"ignore_unknown_options": True})
-@click.argument('language')
-@click.argument('arch')
+@click.argument('compiler')
+@click.option('arch', '--arch', envvar='KRILL_ARCH')
 @click.argument('options', nargs=-1)
-def compile(language, arch, options):
+def compiler(compiler, arch, options):
+    if arch is None:
+        print("Must set an architecture first")
+        return
+    compiler_load = KrillCompilers()
+    compiler_plugin = compiler_load.get_compiler(compiler)
+
     krill_proj = KrillProject.get_project()
 
     if krill_proj is None:
         krill_proj = KrillProject(os.getcwd(), arch, temp=True)
-
-    compiler = KrillCompile()
-    compiler.compile(krill_proj, language, options)
+    
+    krill_proj.run_plugin(compiler_plugin, arch, options)
 
 @click.group()
 def project():
@@ -71,33 +85,22 @@ def project_init(project_dir):
     print(project_dir)
     project = KrillProject.init(project_dir)
 
-@project.command("start")
-@click.argument('language')
-def project_start(language):
+@project.command("build")
+@click.option('inipath', '-p', default=None)
+def project_build(inipath):
     project_obj = KrillProject.get_project()
     if project_obj is not None:
-        project_obj.init_container(language, [])
-
-@project.command("stop")
-@click.argument('language')
-def project_start(language):
-    project = KrillProject.get_project()
-    project.stop_container(language, [])
+        if inipath is None:
+            initpath = os.path.join(project_obj.path, "krill.ini")
+        project_obj.run_build(initpath)
+    else:
+        print("Must activate a project first")
 
 @project.command("info")
 def project_info():
     project_obj = KrillProject.get_project()
     if project_obj is not None:
         project_obj.info()
-
-@project.command("compile", context_settings={"ignore_unknown_options": True})
-@click.argument('language')
-@click.argument('options', nargs=-1)
-def project_compile(language, options):
-    krill_proj = KrillProject.get_project()
-    if krill_proj is not None:
-        compiler = KrillCompile()
-        compiler.compile(krill_proj, language, options)
 
 @project.command("mod", context_settings={"ignore_unknown_options": True})
 @click.argument('modname')
@@ -109,11 +112,11 @@ def project_compile(modname, filename, options):
         krill_proj.run_mod_command(modname, filename, options)
 
 cli.add_command(modbuild)
-cli.add_command(langbuild)
+cli.add_command(compilerbuild)
 cli.add_command(prebuild)
 cli.add_command(postbuild)
-cli.add_command(compile)
 cli.add_command(project)
+cli.add_command(compiler)
 
 def main():
      cli()
