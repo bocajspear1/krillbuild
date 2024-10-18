@@ -2,7 +2,9 @@
 
 ARCHITECTURE_LIST = (
     'x86',
+    'x86-win',
     'x86_64',
+    'x86_64-win',
     "aarch64",
     "aarch64_be",
     "arm",

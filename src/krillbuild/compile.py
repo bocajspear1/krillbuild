@@ -71,9 +71,14 @@ class KrillBuild():
         self._config_path = config_path
         
         self._config = None
+        self._devenv = None
         self._arch_list = []
         self._libraries = []
         self._main = None
+
+    @property
+    def devenv(self):
+        return copy.deepcopy(self._devenv)
 
     @property
     def architectures(self):
@@ -103,7 +108,7 @@ class KrillBuild():
             if 'archlist' not in krill_section:
                 raise ValueError("'archlist' item not found")
             self._arch_list = krill_section['archlist'].split(",")
-
+            self._devenv = krill_section['devenv']
 
             for section in self._config:
                 section_item = self._config[section]

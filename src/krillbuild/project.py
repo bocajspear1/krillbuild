@@ -9,6 +9,8 @@ import sys
 import signal
 import shutil
 
+from termcolor import cprint
+
 logger = logging.getLogger('krillbuild')
 
 from krillbuild.util import extract_file
@@ -27,8 +29,15 @@ if [ -z "$KRILL_PROJECT" ]; then
     echo "Activate project first"
 else
 
-KRILL_ARCH='invalid'
+KRILL_DEV_ENV='invalid'
 if [ -z "$1" ]; then
+    echo "Dev environment must be set"
+else
+    KRILL_DEV_ENV=$1
+fi
+
+KRILL_ARCH='invalid'
+if [ -z "$2" ]; then
     echo "Architecture must be set"
 {arch_cond}
 else
@@ -38,11 +47,13 @@ fi
 if [ "$KRILL_ARCH" != "invalid" ]; then
     export KRILL_INSTALL_DIR={project_path}/.krill/${{KRILL_ARCH}}
     export KRILL_ARCH
+    export KRILL_DEV_ENV
     mkdir -p {project_path}/.krill/${{KRILL_ARCH}}/lib
     mkdir -p {project_path}/.krill/${{KRILL_ARCH}}/bin
     mkdir -p {project_path}/.krill/${{KRILL_ARCH}}/include
-    export PS1="<${{KRILL_ARCH}}> $KRILL_OLD_PS"
+    export PS1="<${{KRILL_DEV_ENV}}-${{KRILL_ARCH}}> $KRILL_OLD_PS"
     krillbuild project info
+    krillbuild devenv setup
 fi
 
 fi 
@@ -50,7 +61,7 @@ fi
 """
 
 from krillbuild.runner import get_runner
-from krillbuild.language_loader import KrillLanguages
+from krillbuild.devenv_loader import KrillDevEnvs
 from krillbuild.mod_loader import KrillMods
 from krillbuild.architectures import ARCHITECTURE_LIST
 from krillbuild.compile import KrillBuild
@@ -74,8 +85,8 @@ class KrillProject():
 
             arch_cond = ""
             for arch in ARCHITECTURE_LIST:
-                arch_cond += f"elif [ \"$1\" == \"{arch}\" ]; then\n"
-                arch_cond += f"    KRILL_ARCH=$1\n"
+                arch_cond += f"elif [ \"$2\" == \"{arch}\" ]; then\n"
+                arch_cond += f"    KRILL_ARCH=$2\n"
 
             activate_file.write(activate_arch_script_sh.format(project_path=project_path, arch_cond=arch_cond))
         os.chmod(activate_path, stat.S_IRUSR | stat.S_IWUSR | stat.S_IXUSR | stat.S_IRGRP | stat.S_IXGRP | stat.S_IXOTH | stat.S_IROTH)
@@ -90,7 +101,7 @@ class KrillProject():
             return None
         
     def __init__(self, project_path, arch, temp=False):
-        self._lang_loader = KrillLanguages()
+        self._devenv_loader = KrillDevEnvs()
         self._mod_loader = KrillMods()
         self._project_path = os.path.abspath(project_path)
         self._arch = arch
@@ -107,9 +118,6 @@ class KrillProject():
     @property
     def temp(self):
         return self._temp
-
-    def get_language(self, language):
-        return self._lang_loader.get_language(language)
     
     def get_mod(self, modname):
         return self._mod_loader.get_mod(modname)
@@ -149,7 +157,7 @@ class KrillProject():
         
         full_command = [
             get_runner(),
-            "run",
+            "run", "-d", 
             "--rm",
             f"--name={running_name}", 
             f"-v{self._project_path}:/work"
@@ -161,16 +169,16 @@ class KrillProject():
         ]
         logger.info("Starting plugin container '%s' with %s", container_name, shlex.join(full_command))
         new_proc = subprocess.Popen(full_command)
-        time.sleep(3)
-        if new_proc.poll() != None:
+        time.sleep(6)
+        if new_proc.returncode != 0:
             logger.error("Container failed to start!")
             logger.error("Output: %s", new_proc.stderr.read().decode())
             return
         else:
             logger.info("Started plugin container")
 
-    def run_plugin(self, plugin, arch, options):
-        container, command, env_vars, new_options = plugin.prepare_run(arch, options)
+    def run_devenv_tool(self, devenv_plugin, tool, arch, options):
+        container, command, env_vars, new_options = devenv_plugin.prepare_run(arch, tool, options)
 
         running_name = self.get_running_name(container)
         if not self._container_running(running_name):
@@ -225,7 +233,6 @@ class KrillProject():
         if result.returncode != 0:
             sys.exit(result.returncode)
 
-
     def create_arch_dir(self, arch):
         arch_dir = os.path.join(self.path, ".krill", arch)
         if not os.path.exists(arch_dir):
@@ -243,9 +250,25 @@ class KrillProject():
         return arch_dir
         
 
-    def run_command_list(self, command_list, env_vars, prefix, container_name=None, shell="/bin/sh", args="-i", do_chmod=True):
+    def run_command_list(self, arch, command_list, env_vars, prefix, container_name=None, shell="/bin/sh", args="-i", do_chmod=True):
         command_sep = "KRILLSEP--KRILLSEP"
-        env_vars["PS1"] = command_sep + "\n"
+        result_command = "echo $? >&2"
+        env_vars["PS1"] = "\n" + command_sep + "\n"
+
+        old_commands = command_list
+        command_list = []
+        for item in old_commands:
+            if item.startswith("%%"):
+                start_split = item.split(" ", maxsplit=1)
+                print(arch, start_split[0][2:])
+                if arch != start_split[0][2:]:
+                    continue
+                else:
+                    command_list.append(start_split[1])
+                    command_list.append(result_command)
+            else:
+                command_list.append(item)
+                command_list.append(result_command)
 
         command_list.append("exit")
         if do_chmod:
@@ -261,6 +284,8 @@ class KrillProject():
 
         sub_shell = subprocess.Popen([shell] + shlex.split(args), stdin=subprocess.PIPE, stderr=subprocess.PIPE, env=env_vars, preexec_fn=preexec_function)
 
+        find_result = False
+        last_result = 0
         for command in command_list:
             command = command.strip().encode()
 
@@ -279,14 +304,28 @@ class KrillProject():
                         if command == b"exit":
                             sub_shell.communicate(command)
                         else:
-                            print(f"\n<{prefix}> ==> {command.decode()}")
+                            if command == result_command.encode():
+                                find_result = True
+                            else:
+                                cprint(f"<{prefix}> ==> {command.decode()}", "green")
                             sub_shell.stdin.write(command + b"\n")
                             sub_shell.stdin.flush()
+
                         done = True
                     else:
-                        sys.stderr.buffer.write(buffer + b"\n")
-                        sys.stderr.buffer.flush()
-                        buffer = b""
+                        
+                        if not find_result:
+                            sys.stderr.buffer.write(buffer + b"\n")
+                            sys.stderr.buffer.flush()
+                            buffer = b""
+                        else:
+                            if buffer.decode() != "":
+                                last_result = int(buffer.decode().strip())
+                                if last_result != 0:
+                                    logger.error("Build failed")
+                                    sys.exit(last_result)
+                                find_result = False
+                                buffer = b""
                 else:
                     buffer += char
 
@@ -296,9 +335,14 @@ class KrillProject():
         if not ok:
             logger.error("Failed to load config file %s", krill_path)
             return
-
+        
+        devenv_obj = self._devenv_loader.get_devenv(build.devenv)
+        if devenv_obj is None:
+            logger.error("Invalid devenv '%s'", build.devenv)
+            return
 
         for arch in build.architectures:
+            bin_path = os.path.join(self.path, ".krill", "bin")
             arch_lib_path = os.path.join(self.path, ".krill", arch, "lib")
             cache_dir = os.path.join(self.path, ".krill", "cache")
             build_base_dir = os.path.join(self.path, ".krill", "build")
@@ -309,10 +353,16 @@ class KrillProject():
             sub_env_add = {
                 "KRILL_ARCH": arch,
                 "KRILL_INSTALL_DIR": arch_dir,
+                "KRILL_DEV_ENV": build.devenv,
+                "LIBRARY_PATH": arch_lib_path
             }
 
             sub_env = os.environ.copy()
             sub_env.update(sub_env_add)
+
+            sub_env['PATH'] = bin_path + ":" + sub_env['PATH']
+
+            devenv_obj.setup(self.path, arch)
 
             for library in build.libraries:
                 
@@ -331,13 +381,11 @@ class KrillProject():
 
                     os.chdir(build_dir)
 
-                    
-
                     commands = library.commands.split("\n")
 
                     # commands = ['env', 'ls -la']
-                    sub_env['CC'] = f"krillbuild --debug compiler {library.compiler}"
-                    self.run_command_list(commands, sub_env, arch)
+                    sub_env['CC'] = f"krillbuild --debug exec {library.compiler}"
+                    self.run_command_list(arch, commands, sub_env, arch)
             
 
             os.chdir(self.path)
@@ -346,8 +394,8 @@ class KrillProject():
 
             print(commands)
 
-            sub_env['CC'] = f"krillbuild --debug compiler {main_object.compiler}"
-            self.run_command_list(commands, sub_env, arch, do_chmod=False)
+            sub_env['CC'] = f"krillbuild exec {main_object.compiler}"
+            self.run_command_list(arch, commands, sub_env, arch, do_chmod=False)
                     
                                 
 
