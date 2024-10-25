@@ -1,4 +1,0 @@
-
-
-class CSharpPlugin():
-    pass

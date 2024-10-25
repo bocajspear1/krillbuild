@@ -62,6 +62,17 @@ def exec(devenv, arch, tool, options):
 def devenv_group():
     pass
 
+@devenv_group.command("build")
+@click.argument('name')
+@click.argument('arch')
+def devenv_build(name, arch):
+    loader = KrillDevEnvs()
+    devenv_obj = loader.get_devenv(name)
+    if devenv_obj is None:
+        print("Invalid devenv")
+        return 1
+    devenv_obj.build(arch)
+
 @devenv_group.command("setup")
 @click.option('devenv', '--devenv', envvar='KRILL_DEV_ENV')
 @click.option('arch', '--arch', envvar='KRILL_ARCH')
@@ -125,6 +136,21 @@ def project_build(inipath):
         if inipath is None:
             initpath = os.path.join(project_obj.path, "krill.ini")
         project_obj.run_build(initpath)
+    else:
+        print("Must activate a project first")
+
+@project.command("stop")
+@click.option('devenv', '--devenv', envvar='KRILL_DEV_ENV')
+@click.option('arch', '--arch', envvar='KRILL_ARCH')
+def project_stop(devenv, arch):
+    loader = KrillDevEnvs()
+    project_obj = KrillProject.get_project()
+    if project_obj is not None:
+        devenv_obj = loader.get_devenv(devenv)
+        if devenv_obj is None:
+            print("Invalid devenv")
+            return 1
+        project_obj.stop_devenv(devenv_obj, arch)
     else:
         print("Must activate a project first")
 

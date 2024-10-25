@@ -39,6 +39,8 @@ fi
 KRILL_ARCH='invalid'
 if [ -z "$2" ]; then
     echo "Architecture must be set"
+elif [ "$2" == "any" ]; then
+    KRILL_ARCH=$2
 {arch_cond}
 else
     echo "Invalid architecture"
@@ -170,15 +172,32 @@ class KrillProject():
         logger.info("Starting plugin container '%s' with %s", container_name, shlex.join(full_command))
         new_proc = subprocess.Popen(full_command)
         time.sleep(6)
-        if new_proc.returncode != 0:
+        if new_proc.wait(30) != 0:
             logger.error("Container failed to start!")
             logger.error("Output: %s", new_proc.stderr.read().decode())
             return
         else:
             logger.info("Started plugin container")
 
+    def stop_devenv(self, devenv_plugin, arch):
+        container = devenv_plugin.get_image(arch)
+        running_name = self.get_running_name(container)
+        if not self._container_running(running_name):
+            logger.error("Devenv %s is not running", devenv_plugin.shortname)
+            return 1
+        full_command = [
+            get_runner(),
+            "stop",
+            running_name
+        ]
+        logger.info("Stopping project container with %s", shlex.join(full_command))
+        new_proc = subprocess.run(full_command)
+        return new_proc.returncode
+
+
     def run_devenv_tool(self, devenv_plugin, tool, arch, options):
-        container, command, env_vars, new_options = devenv_plugin.prepare_run(arch, tool, options)
+        container = devenv_plugin.get_image(arch) 
+        command, env_vars, new_options = devenv_plugin.prepare_run(arch, tool, options)
 
         running_name = self.get_running_name(container)
         if not self._container_running(running_name):
@@ -208,6 +227,11 @@ class KrillProject():
 
         if 'LDFLAGS' in os.environ:
             env_variables.append(f"-eLDFLAGS={os.environ['LDFLAGS']}")
+
+        instant_env = devenv_plugin.get_instant_env(arch)
+        if instant_env is not None:
+            for instant_env_var_name in instant_env:
+                env_variables.append(f"-e{instant_env_var_name}={instant_env[instant_env_var_name]}")
 
         full_command = [
             get_runner(),

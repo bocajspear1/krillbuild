@@ -125,8 +125,11 @@ class MuslCDevEnvPlugin(DevEnvBase):
         'dlltool': "PREFIX-dlltool"
     }
 
+    def get_image(self, arch):
+        return f"krill-c-{arch}"
+
     def build(self, arch):
-        container_name = f"krill-c-{arch}"
+        container_name = self.get_image(arch)
 
         arch_tuple = None
         docker_file_content = ""
@@ -145,8 +148,7 @@ class MuslCDevEnvPlugin(DevEnvBase):
         self.build_container(docker_file_content, container_name)
 
     def prepare_run(self, arch, tool, options):
-        container_name = f"krill-c-{arch}"
-        
+     
         tool_command = ""
 
         all_tools = self.TOOLS
@@ -176,7 +178,7 @@ class MuslCDevEnvPlugin(DevEnvBase):
                 tool_command = tool_template
 
 
-        return container_name, tool_command, {
+        return tool_command, {
             # "LD_LIBRARY_PATH": f"/work/.krill/{arch}/lib",
             "LIBRARY_PATH": f"/work/.krill/{arch}/lib",
             "C_INCLUDE_PATH": f"/work/.krill/{arch}/include",

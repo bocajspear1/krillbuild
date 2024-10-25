@@ -70,3 +70,6 @@ class DevEnvBase(KrillPlugin):
                 tool_file.write("#!/bin/sh\n")
                 tool_file.write(f"krillbuild exec {tool} \"$@\"\n")
             os.chmod(prefix_tool_path, stat.S_IRUSR | stat.S_IWUSR | stat.S_IXUSR | stat.S_IRGRP | stat.S_IXGRP | stat.S_IXOTH | stat.S_IROTH)
+
+    def get_instant_env(self, arch):
+        return None
