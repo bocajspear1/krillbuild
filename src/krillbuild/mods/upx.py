@@ -11,17 +11,22 @@ WORKDIR /work
 
 class UPXPlugin(KrillPlugin):
 
+    def get_image(self, arch):
+        return f"krill-upx"
+    
     def build(self, arch):
         
         docker_file_content = DOCKER_TEMPLATE
 
-        self.build_container(docker_file_content, "krill-upx")
+        self.build_container(docker_file_content, self.get_image(arch))
 
-    def prepare_mod(self, arch, filename, options):
-        
+    def get_commands(self, arch):
+        return ['upx']
+
+    def prepare_mod(self, arch, tool, infile, outfile, filename, options):
         command = "upx"
         options = [filename] + options
 
-        return "krill-upx", command, {
+        return command, outfile, {
             
         }, options

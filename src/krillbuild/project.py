@@ -67,6 +67,7 @@ from krillbuild.devenv_loader import KrillDevEnvs
 from krillbuild.mod_loader import KrillMods
 from krillbuild.architectures import ARCHITECTURE_LIST
 from krillbuild.compile import KrillBuild
+from krillbuild.data import KrillDatabase, KrillTrackedFile
 
 class KrillProject():
 
@@ -108,6 +109,7 @@ class KrillProject():
         self._project_path = os.path.abspath(project_path)
         self._arch = arch
         self._temp = temp
+        self._db = KrillDatabase(os.path.join(self._project_path, ".krill", ".krill.db"))
 
     @property
     def path(self):
@@ -120,6 +122,9 @@ class KrillProject():
     @property
     def temp(self):
         return self._temp
+    
+    def set_arch(self, arch):
+        self._arch = arch
     
     def get_mod(self, modname):
         return self._mod_loader.get_mod(modname)
@@ -179,6 +184,58 @@ class KrillProject():
         else:
             logger.info("Started plugin container")
 
+
+    def _run_container_command(self, running_name, command, options, cmd_env):
+        if options is None:
+            options = []
+        else:
+            options = list(options)
+
+        # Replace any options containing project path to container path
+        for i in range(len(options)):
+            if self._project_path in options[i]:
+                options[i] = options[i].replace(self._project_path, "/work")
+
+
+        dir_set = "/work"
+
+        common = os.path.commonprefix([self._project_path, os.getcwd()])
+        if common != self._project_path:
+            logger.error("Cannot run in non-subdirectory")
+            return
+
+        dir_set = dir_set + os.getcwd().replace(self._project_path, "")
+
+        env_variables = []
+
+        if cmd_env is not None:
+            for env_var_name in cmd_env:
+                env_variables.append(f"-e{env_var_name}={cmd_env[env_var_name]}")
+
+        full_command = [
+            get_runner(),
+            "exec",
+            "-i",
+            "--workdir", dir_set
+        ]
+        full_command += env_variables
+        full_command += [
+            running_name,
+            command
+        ]
+
+        if len(options) > 0 and options[0].strip() == command.strip():
+            full_command += options[1:]
+        else:
+            full_command += options
+
+        logger.debug("Container command is: %s", shlex.join(full_command))
+
+        result = subprocess.run(full_command)
+
+        if result.returncode != 0:
+            sys.exit(result.returncode)
+
     def stop_devenv(self, devenv_plugin, arch):
         container = devenv_plugin.get_image(arch)
         running_name = self.get_running_name(container)
@@ -195,67 +252,19 @@ class KrillProject():
         return new_proc.returncode
 
 
-    def run_devenv_tool(self, devenv_plugin, tool, arch, options):
-        container = devenv_plugin.get_image(arch) 
-        command, env_vars, new_options = devenv_plugin.prepare_run(arch, tool, options)
+    def run_devenv_tool(self, devenv_plugin, tool, options):
+        container = devenv_plugin.get_image(self._arch) 
+        command, env_vars, new_options = devenv_plugin.prepare_run(self._arch, tool, options)
 
         running_name = self.get_running_name(container)
         if not self._container_running(running_name):
             self._start_container(container, running_name, env_vars)
 
-        if new_options is None:
-            new_options = []
-        else:
-            new_options = list(new_options)
-
-        # Replace any options containing project path to container path
-        for i in range(len(new_options)):
-            if self._project_path in new_options[i]:
-                new_options[i] = new_options[i].replace(self._project_path, "/work")
-
-
-        dir_set = "/work"
-
-        common = os.path.commonprefix([self._project_path, os.getcwd()])
-        if common != self._project_path:
-            logger.error("Cannot run in non-subdirectory")
-            return
-
-        dir_set = dir_set + os.getcwd().replace(self._project_path, "")
-
-        env_variables = []
-
+        instant_env = devenv_plugin.get_instant_env(self._arch)
         if 'LDFLAGS' in os.environ:
-            env_variables.append(f"-eLDFLAGS={os.environ['LDFLAGS']}")
-
-        instant_env = devenv_plugin.get_instant_env(arch)
-        if instant_env is not None:
-            for instant_env_var_name in instant_env:
-                env_variables.append(f"-e{instant_env_var_name}={instant_env[instant_env_var_name]}")
-
-        full_command = [
-            get_runner(),
-            "exec",
-            "-i",
-            "--workdir", dir_set
-        ]
-        full_command += env_variables
-        full_command += [
-            running_name,
-            command
-        ]
-
-        if len(new_options) > 0 and new_options[0].strip() == command.strip():
-            full_command += new_options[1:]
-        else:
-            full_command += new_options
-
-        logger.debug("Container command is: %s", shlex.join(full_command))
-
-        result = subprocess.run(full_command)
-
-        if result.returncode != 0:
-            sys.exit(result.returncode)
+            instant_env['LDFLAGS'] = os.environ['LDFLAGS']
+        self._run_container_command(running_name, command, new_options, instant_env)
+ 
 
     def create_arch_dir(self, arch):
         arch_dir = os.path.join(self.path, ".krill", arch)
@@ -273,7 +282,6 @@ class KrillProject():
 
         return arch_dir
         
-
     def run_command_list(self, arch, command_list, env_vars, prefix, container_name=None, shell="/bin/sh", args="-i", do_chmod=True):
         command_sep = "KRILLSEP--KRILLSEP"
         result_command = "echo $? >&2"
@@ -390,7 +398,6 @@ class KrillProject():
 
             for library in build.libraries:
                 
-                
                 if not library.exists(arch_lib_path):
 
                     logger.info("Library %s:%s not found, building...", arch, library.name)
@@ -407,11 +414,10 @@ class KrillProject():
 
                     commands = library.commands.split("\n")
 
-                    # commands = ['env', 'ls -la']
-                    sub_env['CC'] = f"krillbuild --debug exec {library.compiler}"
+                    sub_env['CC'] = f"krillbuild exec {library.compiler}"
                     self.run_command_list(arch, commands, sub_env, arch)
             
-
+            # Build the main application
             os.chdir(self.path)
             main_object = build.main
             commands = main_object.commands.split("\n")
@@ -420,22 +426,76 @@ class KrillProject():
 
             sub_env['CC'] = f"krillbuild exec {main_object.compiler}"
             self.run_command_list(arch, commands, sub_env, arch, do_chmod=False)
-                    
-                                
 
+            # Run the mods
 
+    def _sha256_file(self, filepath):
+        sha256 = hashlib.sha256()
+        with open(filepath, 'rb') as f:
+            while True:
+                data = f.read(65536)
+                if not data:
+                    break
+                sha256.update(data)
+        return str(sha256.hexdigest())
+    
+    def _cache_path(self):
+        cache_path = os.path.join(self._project_path, ".krill", ".cache")
+        if not os.path.exists(cache_path):
+            logger.debug("Creating cache dir")
+            os.mkdir(cache_path)
+        return cache_path
 
+    def _insert_file(self, filepath, parent_hash=None):
+        new_file_hash = self._sha256_file(filepath)
+        self._db.insert_file(os.path.basename(filepath), new_file_hash, parent_sha256_hash=parent_hash)
+        cache_path = self._cache_path()
+        file_cache_path = os.path.join(cache_path, new_file_hash)
+        if not os.path.exists(file_cache_path):
+            logger.debug("Creating cache copy file file %s", filepath)
+            shutil.copy(filepath, file_cache_path)
+        return new_file_hash
 
-    # def init_container(self, language, options):
+    def run_mod_tool(self, mod_plugin, tool, infile, outfile, options):
 
-    #     if self.temp:
-    #         return
+        initial_hash = self._insert_file(infile)
+
+        container = mod_plugin.get_image(self._arch) 
+        running_name = self.get_running_name(container)
+        command, new_outfile, env_vars, new_options = mod_plugin.prepare_mod(self._arch, tool, infile, outfile, list(options))
+
+        if not self._container_running(running_name):
+            self._start_container(container, running_name, env_vars)
+
+        instant_env = mod_plugin.get_instant_env(self._arch)
+        self._run_container_command(running_name, command, new_options, instant_env)
+
+        after_hash = self._insert_file(new_outfile, initial_hash)
+
+    def stop_mod(self, mod_plugin, arch):
+        container = mod_plugin.get_image(arch)
+        running_name = self.get_running_name(container)
+        if not self._container_running(running_name):
+            logger.error("Mod %s is not running", mod_plugin.shortname)
+            return 1
+        full_command = [
+            get_runner(),
+            "stop",
+            running_name
+        ]
+        logger.info("Stopping project mod container with %s", shlex.join(full_command))
+        new_proc = subprocess.run(full_command)
+        return new_proc.returncode
+    
+    def list_files(self):
+        file_data = self._db.list_files()
+        out_list = []
+        cache_path = self._cache_path()
         
-    #     lang_plugin = self.get_language(language)
-
-    #     container, command, env_vars, new_options = lang_plugin.prepare_compile(self._arch, options)
-
-        
+        for file in file_data:
+            filepath = os.path.join(cache_path, file[0])
+            out_list.append(KrillTrackedFile(file[2], file[0], filepath, parent_hash=file[1]))
+        return out_list
 
     #     print(container)
 
