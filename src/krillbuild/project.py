@@ -254,7 +254,7 @@ class KrillProject():
 
     def run_devenv_tool(self, devenv_plugin, tool, options):
         container = devenv_plugin.get_image(self._arch) 
-        command, env_vars, new_options = devenv_plugin.prepare_run(self._arch, tool, options)
+        command, env_vars, new_options = devenv_plugin.prepare_run(self._arch, tool, list(options))
 
         running_name = self.get_running_name(container)
         if not self._container_running(running_name):
@@ -292,7 +292,7 @@ class KrillProject():
         for item in old_commands:
             if item.startswith("%%"):
                 start_split = item.split(" ", maxsplit=1)
-                print(arch, start_split[0][2:])
+
                 if arch != start_split[0][2:]:
                     continue
                 else:
@@ -368,12 +368,17 @@ class KrillProject():
             logger.error("Failed to load config file %s", krill_path)
             return
         
+        if build.devenv_path is not None:
+            self._devenv_loader.load_external(build.devenv, build.devenv_path)
+        
         devenv_obj = self._devenv_loader.get_devenv(build.devenv)
         if devenv_obj is None:
             logger.error("Invalid devenv '%s'", build.devenv)
             return
 
         for arch in build.architectures:
+            self._arch = arch
+
             bin_path = os.path.join(self.path, ".krill", "bin")
             arch_lib_path = os.path.join(self.path, ".krill", arch, "lib")
             cache_dir = os.path.join(self.path, ".krill", "cache")
@@ -393,8 +398,6 @@ class KrillProject():
             sub_env.update(sub_env_add)
 
             sub_env['PATH'] = bin_path + ":" + sub_env['PATH']
-
-            devenv_obj.setup(self.path, arch)
 
             for library in build.libraries:
                 
@@ -419,15 +422,28 @@ class KrillProject():
             
             # Build the main application
             os.chdir(self.path)
-            main_object = build.main
-            commands = main_object.commands.split("\n")
+            main_variations = build.main.variations(arch)
 
-            print(commands)
+            for main_object in main_variations:
+                commands = main_object.commands
 
-            sub_env['CC'] = f"krillbuild exec {main_object.compiler}"
-            self.run_command_list(arch, commands, sub_env, arch, do_chmod=False)
+                
 
-            # Run the mods
+                sub_env['CC'] = f"krillbuild exec {main_object.compiler}"
+                self.run_command_list(arch, commands, sub_env, arch, do_chmod=False)
+
+                if main_object.variation is not None:
+                    sub_env_add['KRILL_VARIATION'] = main_object.variation
+
+                # Run the mods
+                for mod in build.mods:
+                    mod_obj = self.get_mod(mod.name)
+                    infile = mod.infile(sub_env_add)
+                    outfile = mod.outfile(sub_env_add)
+                    logger.info("Running mod %s with tool %s", mod.name, mod.tool)
+                    self.run_mod_tool(mod_obj, mod.tool, infile, outfile, mod.options)
+
+
 
     def _sha256_file(self, filepath):
         sha256 = hashlib.sha256()

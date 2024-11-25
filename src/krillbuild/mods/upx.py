@@ -23,9 +23,9 @@ class UPXPlugin(KrillPlugin):
     def get_commands(self, arch):
         return ['upx']
 
-    def prepare_mod(self, arch, tool, infile, outfile, filename, options):
+    def prepare_mod(self, arch, tool, infile, outfile, options):
         command = "upx"
-        options = [filename] + options
+        options = [infile] + options
 
         return command, outfile, {
             

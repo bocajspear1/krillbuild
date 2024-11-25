@@ -9,7 +9,7 @@ logger = logging.getLogger('krillbuild')
 from krillbuild.project import KrillProject
 from krillbuild.devenv_loader import KrillDevEnvs
 from krillbuild.mod_loader import KrillMods
-
+from krillbuild.compile import KrillBuild
 
 @click.group()
 @click.option('--debug', is_flag=True, default=False)
@@ -62,13 +62,28 @@ def devenv_group():
 @devenv_group.command("build")
 @click.argument('name')
 @click.argument('arch')
-def devenv_build(name, arch):
-    loader = KrillDevEnvs()
-    devenv_obj = loader.get_devenv(name)
-    if devenv_obj is None:
-        print("Invalid devenv")
-        return 1
-    devenv_obj.build(arch)
+@click.option('inipath', '-p', default=None, help="Path to INI file")
+def devenv_build(name, arch, inipath):
+    if inipath is None:
+        loader = KrillDevEnvs()
+        devenv_obj = loader.get_devenv(name)
+        if devenv_obj is None:
+            print("Invalid devenv")
+            return 1
+        devenv_obj.build(arch)
+    else:
+        ini_file = KrillBuild(os.path.abspath(inipath))
+        ini_file.load()
+
+        if ini_file.devenv_path is not None:
+            loader = KrillDevEnvs()
+            loader.load_external(ini_file.devenv, ini_file.devenv_path)
+            devenv_obj = loader.get_devenv(name)
+            if devenv_obj is None:
+                print("Invalid devenv")
+                return 1
+            devenv_obj.build(arch)
+
 
 @devenv_group.command("setup")
 @click.option('devenv', '--devenv', envvar='KRILL_DEV_ENV')
@@ -126,13 +141,13 @@ def project_init(project_dir):
     project = KrillProject.init(project_dir)
 
 @project.command("build")
-@click.option('inipath', '-p', default=None)
+@click.option('inipath', '-p', default=None, help="Alternate path to INI file")
 def project_build(inipath):
     project_obj = KrillProject.get_project()
     if project_obj is not None:
         if inipath is None:
-            initpath = os.path.join(project_obj.path, "krill.ini")
-        project_obj.run_build(initpath)
+            inipath = os.path.join(project_obj.path, "krill.ini")
+        project_obj.run_build(inipath)
     else:
         print("Must activate a project first")
 

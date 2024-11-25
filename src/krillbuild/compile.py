@@ -5,6 +5,8 @@ import shlex
 import configparser
 import copy
 from urllib.parse import urlparse, unquote
+from string import Template
+
 
 import requests
 
@@ -16,13 +18,57 @@ from krillbuild.util import is_basic_string
 logger = logging.getLogger('krillbuild')
 
 
+class KrillBuildMain():
+
+    def __init__(self, main_obj):
+        self._variations = []
+        self._main_obj = main_obj
+
+    def add_variation(self, name, archlist, args):
+        self._variations.append({
+            "name": name,
+            'archlist': archlist,
+            'args': args
+        })
+
+    def variations(self, arch):
+        if len(self._variations) == 0:
+            return [self._main_obj]
+        
+        return_list = []
+        for variation in self._variations:
+            if arch in variation['archlist']:
+                
+                command_list = self._main_obj.commands
+                new_commands = []
+                for arg in variation['args']:
+                    found = False
+                    arg_val = f"%{arg}%"
+                    for i in range(len(command_list)):
+                        print(command_list[i], arg_val)
+                        if arg_val in command_list[i]:
+                            found = True
+                            new_command = command_list[i].replace(arg_val, variation['args'][arg])
+                            new_command = new_command.replace("$KRILL_VARIATION", variation['name'])
+                            new_commands.append(new_command)
+                    if not found:
+                        raise ValueError("Arg %s not found in any command", arg_val)
+
+                new_obj = KrillBuildObject(self._main_obj.name, self._main_obj.compiler, new_commands, variation=variation['name'])
+                return_list.append(new_obj)
+
+            else:
+                logger.debug("Ignoring variation %s, not in archlist", variation['name'])
+
+        return return_list  
+
 class KrillBuildObject():
-    def __init__(self, name, compiler, commands, static=True):
-        print(name)
+    def __init__(self, name, compiler, commands, static=True, variation=None):
         self._name = is_basic_string(name)
         self._static = static
         self._compiler = is_basic_string(compiler)
         self._commands = commands
+        self._variation = variation
 
     @property
     def is_static(self):
@@ -33,12 +79,18 @@ class KrillBuildObject():
         return self._name
     
     @property
+    def variation(self):
+        return self._variation
+    
+    @property
     def commands(self):
         return self._commands
     
     @property
     def compiler(self):
         return self._compiler
+   
+
 
 class KrillLibrary(KrillBuildObject):
 
@@ -63,8 +115,33 @@ class KrillLibrary(KrillBuildObject):
 
         return final_path
 
-    
+class KrillBuildMod():
 
+    def __init__(self, mod_name, tool, infile, outfile, options):
+        self._name = mod_name
+        self._tool = tool
+        self._infile = infile
+        self._outfile = outfile
+        self._options = options
+
+    @property
+    def name(self):
+        return self._name
+
+    @property
+    def tool(self):
+        return self._tool
+    
+    def infile(self, env_vars):
+        return Template(self._infile).safe_substitute(env_vars)
+    
+    def outfile(self, env_vars):
+        return Template(self._outfile).safe_substitute(env_vars)
+    
+    @property
+    def options(self):
+        return self._options
+    
 class KrillBuild():
 
     def __init__(self, config_path):
@@ -72,13 +149,19 @@ class KrillBuild():
         
         self._config = None
         self._devenv = None
+        self._devenv_path = None
         self._arch_list = []
         self._libraries = []
+        self._mods = []
         self._main = None
 
     @property
     def devenv(self):
         return copy.deepcopy(self._devenv)
+    
+    @property
+    def devenv_path(self):
+        return self._devenv_path
 
     @property
     def architectures(self):
@@ -87,6 +170,10 @@ class KrillBuild():
     @property
     def libraries(self):
         return copy.deepcopy(self._libraries)
+    
+    @property
+    def mods(self):
+        return copy.deepcopy(self._mods)
     
     @property
     def main(self):
@@ -102,21 +189,38 @@ class KrillBuild():
         with open(self._config_path, "r") as config_file:
             parser.read_file(config_file)
             self._config = parser._sections
-            print(self._config)
 
             krill_section = self._config['krill']
             if 'archlist' not in krill_section:
                 raise ValueError("'archlist' item not found")
             self._arch_list = krill_section['archlist'].split(",")
             self._devenv = krill_section['devenv']
+            if 'path' in krill_section:
+                self._devenv_path = krill_section['path']
 
             for section in self._config:
                 section_item = self._config[section]
                 if section.startswith("lib."):
                     new_lib = KrillLibrary(section[4:], section_item['source'], section_item['compiler'], section_item['commands'].strip())
                     self._libraries.append(new_lib)
+                elif section.startswith("mod."):
+                    mod_split = section[4:].split(".")
+                    new_mod = KrillBuildMod(mod_split[0], mod_split[1], section_item['infile'], section_item['outfile'], section_item['options'])
+                    self._mods.append(new_mod)
                 elif section == "main":
-                    self._main = KrillBuildObject("main", section_item['compiler'], section_item['commands'].strip())
+                    self._main = KrillBuildMain(KrillBuildObject("main", section_item['compiler'], section_item['commands'].strip().split("\n")))
+                elif section.startswith("main."):
+                    var_archlist = []
+                    if 'archlist' in section_item:
+                        var_archlist = section_item['archlist'].split(',')
+
+                    args_map = {}
+
+                    for item_name in section_item:
+                        if item_name not in ('archlist',):
+                            args_map[item_name.upper()] = section_item[item_name]
+                    self._main.add_variation( section[5:], var_archlist, args_map)
+                
         
         return True
 
