@@ -375,9 +375,13 @@ class KrillProject():
         if devenv_obj is None:
             logger.error("Invalid devenv '%s'", build.devenv)
             return
+        
+        
 
         for arch in build.architectures:
             self._arch = arch
+
+            devenv_obj.setup(self.path, self._arch)
 
             bin_path = os.path.join(self.path, ".krill", "bin")
             arch_lib_path = os.path.join(self.path, ".krill", arch, "lib")
@@ -391,7 +395,8 @@ class KrillProject():
                 "KRILL_ARCH": arch,
                 "KRILL_INSTALL_DIR": arch_dir,
                 "KRILL_DEV_ENV": build.devenv,
-                "LIBRARY_PATH": arch_lib_path
+                "LIBRARY_PATH": arch_lib_path,
+                "KRILL_PROJECT": self.path
             }
 
             sub_env = os.environ.copy()

@@ -24,7 +24,7 @@ class KrillDevEnvs():
         if self._project_path is not None:
             project_devenv_path = os.path.join(self._project_path, "devenv")
             if os.path.exists(project_devenv_path):
-                proj_devenv_list = os.listdir()
+                proj_devenv_list = os.listdir(project_devenv_path)
                 for item in proj_devenv_list:
                     if item != "__init__.py" and item.endswith(".py"):
                         devenv_short = item.replace(".py", "")
