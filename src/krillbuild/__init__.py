@@ -182,14 +182,29 @@ def project_stopmod(modname, arch):
     else:
         print("Must activate a project first")
 
-@project.command("listfiles")
-def project_listfiles():
+@project.group()
+def files():
+    pass
+
+@files.command("list")
+def files_list():
     project_obj = KrillProject.get_project()
     if project_obj is not None:
         file_list = project_obj.list_files()
-        print("{: <64} {: <64} {: <30}".format("Parent", "SHA256", "Name"))
+        print("{: <32} {: <32} {: <40} {: <30}".format("Parent", "SHA256", "Name", "Description"))
         for item in file_list:
-            print("{: >64} {: >64} {: <30}".format(item.parent_hash, item.hash, item.name))
+            if len(item.parent_hash) > 0:
+                print("{: >32} {: >32} {: <40} {: <30}".format(item.parent_hash[:29] + "...", item.hash[:29] + "...", item.name, item.description))
+            else:
+                print("{: >32} {: >32} {: <40} {: <30}".format("", item.hash[:29] + "...", item.name, item.description))
+    else:
+        print("Must activate a project first")
+
+@files.command("clear")
+def files_clear():
+    project_obj = KrillProject.get_project()
+    if project_obj is not None:
+        project_obj.clear_files()
     else:
         print("Must activate a project first")
 

@@ -436,13 +436,16 @@ class KrillProject():
                     sub_env_add['KRILL_VARIATION'] = main_object.variation
 
                 # Run the mods
-                for mod in build.mods:
-                    mod_obj = self.get_mod(mod.name)
-                    infile = mod.infile(sub_env_add)
-                    outfile = mod.outfile(sub_env_add)
-                    logger.info("Running mod %s with tool %s", mod.name, mod.tool)
-                    self.run_mod_tool(mod_obj, mod.tool, infile, outfile, mod.options)
-
+                for mod_map in build.mods:
+                    for mod_name in mod_map:
+                        mod = mod_map[mod_name]
+                        mod_obj = self.get_mod(mod.name)
+                        if mod.archlist is not None and arch not in mod.archlist:
+                            continue
+                        infile = mod.infile(sub_env_add)
+                        outfile = mod.outfile(sub_env_add)
+                        logger.info("Running mod %s with tool %s", mod.name, mod.tool)
+                        self.run_mod_tool(mod_obj, mod.tool, infile, outfile, shlex.split(mod.options))
 
 
     def _sha256_file(self, filepath):
@@ -462,9 +465,9 @@ class KrillProject():
             os.mkdir(cache_path)
         return cache_path
 
-    def _insert_file(self, filepath, parent_hash=None):
+    def _insert_file(self, filepath, description, parent_hash=None):
         new_file_hash = self._sha256_file(filepath)
-        self._db.insert_file(os.path.basename(filepath), new_file_hash, parent_sha256_hash=parent_hash)
+        self._db.insert_file(os.path.basename(filepath), new_file_hash, description, parent_sha256_hash=parent_hash)
         cache_path = self._cache_path()
         file_cache_path = os.path.join(cache_path, new_file_hash)
         if not os.path.exists(file_cache_path):
@@ -474,7 +477,7 @@ class KrillProject():
 
     def run_mod_tool(self, mod_plugin, tool, infile, outfile, options):
 
-        initial_hash = self._insert_file(infile)
+        initial_hash = self._insert_file(infile, f"Main - {self._arch}")
 
         container = mod_plugin.get_image(self._arch) 
         running_name = self.get_running_name(container)
@@ -486,7 +489,7 @@ class KrillProject():
         instant_env = mod_plugin.get_instant_env(self._arch)
         self._run_container_command(running_name, command, new_options, instant_env)
 
-        after_hash = self._insert_file(new_outfile, initial_hash)
+        after_hash = self._insert_file(new_outfile, f"{mod_plugin.name} {list(options)}", parent_hash=initial_hash)
 
     def stop_mod(self, mod_plugin, arch):
         container = mod_plugin.get_image(arch)
@@ -510,121 +513,11 @@ class KrillProject():
         
         for file in file_data:
             filepath = os.path.join(cache_path, file[0])
-            out_list.append(KrillTrackedFile(file[2], file[0], filepath, parent_hash=file[1]))
+            out_list.append(KrillTrackedFile(file[2], file[0], file[3], filepath, parent_hash=file[1]))
         return out_list
+    
+    def clear_files(self):
+        shutil.rmtree(self._cache_path())
+        os.unlink(self._db.path)
 
-    #     print(container)
-
-    #     running_name = self.get_running_name(lang_plugin.shortname, self._arch)
-
-    #     runner = get_runner()
-
-    #     inspect_command = [
-    #         runner,
-    #         "inspect",
-    #         running_name
-    #     ]
-
-    #     logger.info("Inspecting for project container '%s' with %s", container, shlex.join(inspect_command))
-
-
-    #     result = subprocess.run(inspect_command, capture_output=True)
-    #     if result.returncode != 0:
-            
-
-    # def stop_container(self, language, options):
-    #     lang_plugin = self.get_language(language)
-    #     running_name = self.get_running_name(lang_plugin.shortname,  self._arch)
-
-    #     runner = get_runner()
-
-    #     inspect_command = [
-    #         runner,
-    #         "inspect",
-    #         running_name
-    #     ]
-
-    #     logger.info("Inspecting for project container with %s", shlex.join(inspect_command))
-
-
-    #     result = subprocess.run(inspect_command, capture_output=True)
-    #     if result.returncode == 0:
-    #         full_command = [
-    #             runner,
-    #             "stop",
-    #             running_name
-    #         ]
-    #         logger.info("Stopping project container with %s", shlex.join(full_command))
-    #         new_proc = subprocess.run(full_command)
-
-
-
-    # def run_mod_command(self, mod, filename, options):
-    #     mod_plugin = self.get_mod(mod)
-    #     running_name = self.get_running_name(mod_plugin.shortname, self._arch)
-    #     container, command, env_vars, new_options = mod_plugin.prepare_mod(self._arch, filename, list(options))
-
-    #     env_variables = []
-
-    #     if env_vars is not None:
-    #         for env_var_name in env_vars:
-    #             env_variables.append(f"-e{env_var_name}={env_vars[env_var_name]}")
-
-    #     full_command = [
-    #         get_runner(),
-    #         "run",
-    #         "-i",
-    #         "--rm",
-    #         f"-v{self._project_path}:/work",
-    #     ]
-    #     full_command += env_variables
-    #     full_command += [
-    #         container,
-    #         command
-    #     ]
-    #     full_command += new_options
-
-    #     logger.debug("Temp container command is: %s", shlex.join(full_command))
-
-    #     result = subprocess.run(full_command)
-
-    # def run_build_command(self, language, options):
-    #     lang_plugin = self.get_language(language)
-    #     running_name = self.get_running_name(lang_plugin.shortname, self._arch)
-    #     container, command, env_vars, new_options = lang_plugin.prepare_compile(self._arch, options)
-    #     result = None
-
-        
-    #     if self._temp:
-
-    #         env_variables = []
-
-            
-    #         if env_vars is not None:
-    #             for env_var_name in env_vars:
-    #                 env_variables.append(f"-e{env_var_name}={env_vars[env_var_name]}")
-
-    #         if 'LDFLAGS' in os.environ:
-    #             env_variables.append(f"-eLDFLAGS={os.environ['LDFLAGS']}")
-
-    #         full_command = [
-    #             get_runner(),
-    #             "run",
-    #             "-i",
-    #             "--rm",
-    #             f"-v{self._project_path}:/work",
-    #         ]
-    #         full_command += env_variables
-    #         full_command += [
-    #             container,
-    #             command
-    #         ]
-    #         full_command += new_options
-
-    #         logger.debug("Temp container command is: %s", shlex.join(full_command))
-
-    #         result = subprocess.run(full_command)
-    #     else:
-            
-
-        
+ 

@@ -1,6 +1,7 @@
 testing/
 custom/
 *.out
+.krill/
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

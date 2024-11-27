@@ -2,10 +2,11 @@ import sqlite3
 
 class KrillTrackedFile():
 
-    def __init__(self, name, hash, filepath, parent_hash=None):
+    def __init__(self, name, hash, description, filepath, parent_hash=None):
         self._name = name
         self._path = filepath
         self._hash = hash
+        self._description = description
         self._parent_hash = parent_hash
 
     @property
@@ -17,6 +18,10 @@ class KrillTrackedFile():
         return self._hash
     
     @property
+    def description(self):
+        return self._description
+    
+    @property
     def parent_hash(self):
         if self._parent_hash is None:
             return ""
@@ -26,6 +31,11 @@ class KrillDatabase():
 
     def __init__(self, db_path):
         self._db = sqlite3.connect(db_path)
+        self._path = db_path
+
+    @property
+    def path(self):
+        return self._path
 
     def has_table(self, table):
         cur = self._db.cursor()
@@ -35,7 +45,7 @@ class KrillDatabase():
     def _ensure_file_table(self):
         if not self.has_table("files"):
             cur = self._db.cursor()
-            cur.execute("CREATE TABLE files(sha256 TEXT UNIQUE, parent_sha256, filename)")
+            cur.execute("CREATE TABLE files(sha256 TEXT UNIQUE, parent_sha256, filename, description)")
             self._db.commit()
 
     def list_files(self):
@@ -51,7 +61,7 @@ class KrillDatabase():
         cur.execute("SELECT * FROM files WHERE sha256 = ?", params)
         return cur.fetchone()
 
-    def insert_file(self, filename, sha256_hash, parent_sha256_hash=None):
+    def insert_file(self, filename, sha256_hash, description, parent_sha256_hash=None):
         self._ensure_file_table()
         if parent_sha256_hash is not None:
             parent_data = self.get_file(parent_sha256_hash)
@@ -61,5 +71,5 @@ class KrillDatabase():
         check_data = self.get_file(sha256_hash)
         if check_data is None:
             cur = self._db.cursor()
-            cur.execute("INSERT INTO files VALUES(?, ?, ?)", (sha256_hash, parent_sha256_hash, filename))
+            cur.execute("INSERT INTO files VALUES(?, ?, ?, ?)", (sha256_hash, parent_sha256_hash, filename, description))
             self._db.commit()

@@ -45,7 +45,6 @@ class KrillBuildMain():
                     found = False
                     arg_val = f"%{arg}%"
                     for i in range(len(command_list)):
-                        print(command_list[i], arg_val)
                         if arg_val in command_list[i]:
                             found = True
                             new_command = command_list[i].replace(arg_val, variation['args'][arg])
@@ -117,12 +116,13 @@ class KrillLibrary(KrillBuildObject):
 
 class KrillBuildMod():
 
-    def __init__(self, mod_name, tool, infile, outfile, options):
+    def __init__(self, mod_name, tool, infile, outfile, options, archlist=None):
         self._name = mod_name
         self._tool = tool
         self._infile = infile
         self._outfile = outfile
         self._options = options
+        self._archlist = archlist
 
     @property
     def name(self):
@@ -131,6 +131,10 @@ class KrillBuildMod():
     @property
     def tool(self):
         return self._tool
+    
+    @property
+    def archlist(self):
+        return self._archlist
     
     def infile(self, env_vars):
         return Template(self._infile).safe_substitute(env_vars)
@@ -204,9 +208,39 @@ class KrillBuild():
                     new_lib = KrillLibrary(section[4:], section_item['source'], section_item['compiler'], section_item['commands'].strip())
                     self._libraries.append(new_lib)
                 elif section.startswith("mod."):
-                    mod_split = section[4:].split(".")
-                    new_mod = KrillBuildMod(mod_split[0], mod_split[1], section_item['infile'], section_item['outfile'], section_item['options'])
-                    self._mods.append(new_mod)
+                    mod_id = section[4:]
+                    mod_split = mod_id.split(".")
+                    
+                    mod_name = mod_split[0]
+                    new_mod = None
+                    if 'archlist' in section_item:
+                        new_mod = KrillBuildMod(mod_name, mod_split[1], section_item['infile'], section_item['outfile'], 
+                                                section_item['options'], archlist=section_item['archlist'].split(","))
+                    else:
+                        new_mod = KrillBuildMod(mod_name, mod_split[1], section_item['infile'], section_item['outfile'], 
+                                                section_item['options'])
+                        
+                    if 'after' in section_item:
+                        if len(self._mods) == 0:
+                            raise ValueError("Cannot have 'after' in first mod")
+                        mod_found = False
+                        search_mod = section_item['after'][4:]
+                        for i in range(len(self._mods)):
+                            mod_map = self._mods[i]
+                            if search_mod in mod_map:
+                                mod_found = True
+                                if i == len(self._mods)-1:
+                                    self._mods.append({
+                                        mod_id: new_mod
+                                    })
+                                else:
+                                    self._mods[i+1][mod_id] = new_mod
+                            if not mod_found:
+                                raise ValueError(f"Mod {search_mod} not found for 'after' setting in mod {mod_id}")
+                    else:
+                        self._mods.append({
+                            mod_id: new_mod
+                        })
                 elif section == "main":
                     self._main = KrillBuildMain(KrillBuildObject("main", section_item['compiler'], section_item['commands'].strip().split("\n")))
                 elif section.startswith("main."):

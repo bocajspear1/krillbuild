@@ -1,7 +1,7 @@
 [project]
 name = "krillbuild"
 version = "0.1.0"
-description = "Build test malware binaries"
+description = "Build static binary variations of architecture, options, and format."
 authors = [
     {name = "Jacob Hartman", email = "junyunharold1@gmail.com"},
 ]
