@@ -10,6 +10,9 @@ WORKDIR /work
 
 
 class UPXPlugin(KrillPlugin):
+    """Plugin for the popular UPX packer.
+    
+    """
 
     def get_image(self, arch):
         return f"krill-upx"

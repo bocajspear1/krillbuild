@@ -26,6 +26,9 @@ WORKDIR /work
 
 
 class KiteshieldPlugin(KrillPlugin):
+    """Plugin for the Kiteshield, a x64-86 encryptor
+    
+    """
 
     def get_image(self, arch):
         return f"krill-kiteshield-{arch}"

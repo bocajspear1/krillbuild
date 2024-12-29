@@ -12,6 +12,9 @@ WORKDIR /work
 
 
 class ZIPPlugin(KrillPlugin):
+    """Plugin for zipping files, utilizes 7z to support both ZipCrypto and AES encryption.
+    
+    """
 
     def get_image(self, arch):
         return f"krill-zip"

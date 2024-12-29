@@ -8,13 +8,19 @@ Provides encoding functionality.
 
 ##kiteshield
 
-None
+Plugin for the Kiteshield, a x64-86 encryptor
+    
+    
 
 ##upx
 
-None
+Plugin for the popular UPX packer.
+    
+    
 
 ##zip
 
-None
+Plugin for zipping files, utilizes 7z to support both ZipCrypto and AES encryption.
+    
+    
 

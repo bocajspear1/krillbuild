@@ -247,3 +247,9 @@ Alternate INI files can be set with `-p <FILE>` argument.
 ### Custom Plugins
 
 KrillBuild INI files can configure a path to custom plugin Python (`.py`) file by setting the `path` value in the `[krill]` section. 
+
+### Adding Variations
+
+Slightly different builds of the same main section can be created using variations. To create a variation, you still set a `[main]` section as usual, however, you add `[main.<VARIATION>]` sections. These variation have a few set keys, documented below. Any key not defined below is replace the string `%FIELD%` in the `[main]` section's command list. For example, the key `ARGS` will replace the value `%ARGS` in the `[main]` section commands.
+
+- `archlist`: List of architectures the variation is limited to.
