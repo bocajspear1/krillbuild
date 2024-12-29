@@ -1,0 +1,11 @@
+site_name: KrillBuild
+nav:
+  - Home: index.md
+  - Getting Started: getting-started.md
+  - Commands: commands.md
+  - DevEnvs: devenvs.md
+  - Mods: mods.md
+  - Developing: developing.md
+theme: readthedocs
+markdown_extensions:
+  - admonition

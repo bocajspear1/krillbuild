@@ -20,6 +20,9 @@ class KrillMods():
                         new_plugin = getattr(temp_mod, mod_item)()
                         new_plugin.shortname = mod_short
                         self._mods.append(new_plugin)
+
+    def list_mods(self):
+        return self._mods
     
     def get_mod(self, mod_name):
         for plugin in self._mods:

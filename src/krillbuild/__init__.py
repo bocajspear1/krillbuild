@@ -35,6 +35,9 @@ def cli(debug):
 @click.argument('mod')
 @click.argument('arch')
 def modbuild(mod, arch):
+    """Run the container build for the module MOD and architecture ARCH
+    
+    """
     mod_loader = KrillMods()
     mod = mod_loader.get_mod(mod)
     mod.build(arch)
@@ -55,15 +58,18 @@ def exec(devenv, tool, options):
 
     
 
-@click.group('devenv')
+@click.group('devenv', help="Commands for managing devenvs")
 def devenv_group():
     pass
 
 @devenv_group.command("build")
 @click.argument('name')
 @click.argument('arch')
-@click.option('inipath', '-p', default=None, help="Path to INI file")
+@click.option('inipath', '-p', default=None, help="Path to alternate INI file")
 def devenv_build(name, arch, inipath):
+    """Run container build for devenv NAME with architecture ARCH
+    
+    """
     if inipath is None:
         loader = KrillDevEnvs()
         devenv_obj = loader.get_devenv(name)
@@ -106,22 +112,27 @@ def devenv_setup(devenv, arch):
 
 @devenv_group.command("list")
 def devenv_list():
+   """List all devenvs, including custom ones
+   
+   """
    loader = KrillDevEnvs()
    for item in loader.list_devenvs():
        print(f" - {item.shortname}")
 
 @devenv_group.command("toollist")
-@click.option('devenv', '--devenv', envvar='KRILL_DEV_ENV')
-@click.option('arch', '--arch', envvar='KRILL_ARCH')
+@click.option('devenv', '--devenv', envvar='KRILL_DEV_ENV', help="Name of devenv to use, uses environment variable KRILL_DEV_ENV if available.")
+@click.option('arch', '--arch', envvar='KRILL_ARCH', help="Devenv architecture to use, uses environment variable KRILL_ARCH if available.")
 def devenv_toollist(devenv, arch):
-    if devenv is None:
-        print("DevEnv not set")
-        return 1
+    """List tools available for current devenv (if activated) or all devenvs
+    
+    """
     if arch is None:
         print("Arch not set")
         return 1
     loader = KrillDevEnvs()
     for devenv_obj in loader.list_devenvs():
+        if devenv is not None and devenv != devenv_obj.shortname:
+            continue
         print(f"# {devenv_obj.shortname}")
         tool_list = devenv_obj.get_tools(arch)
         for tool in tool_list:
@@ -182,12 +193,15 @@ def project_stopmod(modname, arch):
     else:
         print("Must activate a project first")
 
-@project.group()
+@project.group(help="Commands for managing tracked project files")
 def files():
     pass
 
 @files.command("list")
 def files_list():
+    """List tracked files for project. List includes "parent" files, files from which the file was modified from.
+    
+    """
     project_obj = KrillProject.get_project()
     if project_obj is not None:
         file_list = project_obj.list_files()
@@ -198,31 +212,42 @@ def files_list():
             else:
                 print("{: >32} {: >32} {: <40} {: <30}".format("", item.hash[:29] + "...", item.name, item.description))
     else:
-        print("Must activate a project first")
+        logger.error("No project activated")
 
 @files.command("clear")
 def files_clear():
+    """Clear all tracked files from project
+    
+    """
     project_obj = KrillProject.get_project()
     if project_obj is not None:
         project_obj.clear_files()
     else:
-        print("Must activate a project first")
+        logger.error("No project activated")
 
 @project.command("info")
 def project_info():
+    """Get current project info
+    
+    """
     project_obj = KrillProject.get_project()
     if project_obj is not None:
         project_obj.info()
+    else:
+        logger.error("No project activated")
 
 
 
 @click.command("mod", context_settings={"ignore_unknown_options": True})
 @click.argument('modselect')
-@click.option('arch', '--arch', envvar='KRILL_ARCH')
-@click.option('-i', '--infile')
-@click.option('-o', '--outfile')
+@click.option('arch', '--arch', envvar='KRILL_ARCH', help="Architecture to use")
+@click.option('-i', '--infile', help="Input file")
+@click.option('-o', '--outfile', help="Output file")
 @click.argument('options', nargs=-1)
 def mod_run(modselect, arch, infile, outfile, options):
+    """Run a mod plugin against 'infile' and output to 'outfile'. 'modselect' is 'mod_name.mod_function'.
+    
+    """
     loader = KrillMods()
 
     modsplit = modselect.split(".")

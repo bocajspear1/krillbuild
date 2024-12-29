@@ -25,6 +25,9 @@ WORKDIR /work
 """
 
 class MonoDevEnvPlugin(DevEnvBase):
+    """DevEnv with Mono tools for building C# binaries.
+    
+    """
 
 
     TOOLS = {

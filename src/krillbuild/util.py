@@ -9,7 +9,7 @@ def is_basic_string(in_str):
     return in_str
 
 def get_command_path(command):
-    if re.search(r"[^0-9a-zA-Z]", command) is not None:
+    if re.search(r"[^-_0-9a-zA-Z]", command) is not None:
         raise ValueError("Attempting to find invalid command")
     which_command = subprocess.run("which " + command, shell=True, capture_output=True)
         
