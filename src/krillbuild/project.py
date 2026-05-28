@@ -329,7 +329,7 @@ class KrillProject():
                 if char == b"\n":
                     if command_sep.encode() in buffer:
                         buffer = buffer.replace(command_sep.encode(), b"")
-                        sys.stderr.buffer.write(buffer + b"\n")
+                        sys.stderr.buffer.write(buffer)
                         sys.stderr.buffer.flush()
                         buffer = b""
 
@@ -347,7 +347,7 @@ class KrillProject():
                     else:
                         
                         if not find_result:
-                            sys.stderr.buffer.write(buffer + b"\n")
+                            sys.stderr.buffer.write(buffer)
                             sys.stderr.buffer.flush()
                             buffer = b""
                         else:

@@ -208,6 +208,20 @@ outfile = test.$KRILL_ARCH
 options = 
 ```
 
+### Variables
+
+A few new environment variables are added, mainly to assist in naming outputs to differentiate them.
+
+!!! Note
+
+    KrillBuild doesn't automatically rename output files for you, so its up to you to make sure the names for each architecture are unique!
+
+The following variables are added:
+
+- `KRILL_ARCH`: The name of the architecture
+- `KRILL_VARIATION`: (Only if using variations, see below) The name of the variation.
+
+
 ### Sections
 
 #### `[krill]`
@@ -216,7 +230,7 @@ This section defines the devenv for the INI file and a list of desired architect
 
 #### `[lib.???]`
 
-`lib` sections define dependencies to be built before any other code. Here you can define a source archive (which is cached) and the command commands needed to statically compile the library. KrillBuild will check to see if the library is already built or not and only build if the library is not found. It utilizes the name in the section's title after the dot.
+`lib` sections define dependencies to be built before any other code. Here you can define a source archive (which is cached) and the commands needed to statically compile the library. KrillBuild will check to see if the library is already built or not and only build if the library is not found. It utilizes the name in the section's title after the dot.
 
 !!! warning
 
@@ -230,11 +244,17 @@ Commands in the command list are inputted to a shell, so can take advantage of s
 
 This section defines the commands for primary binary. Commands here should already be set up with proper include and library paths, allowing for less cluttered commands. In the example, it tells gcc to link the curl and mbedtls libraries without having to set the paths to the locations of those libraries. (For reference, they are located in `.krill/<ARCHITECTURE>`, which gcc is configured to look it). The line starting with `%%x86_64-win` creates an extra environment variable for when cross compiling to Windows that sets some options not needed on Linux builds.
 
-Commands in the command list are inputted to a shell, so can take advantage of shell environment variables. By default, KrillBuild will stop if the output of a command is not successful (return code other than `0`).
+Commands in the command list are inputted to a shell, so can take advantage of shell environment variables. By default, KrillBuild will stop if the output of a command is not successful (return code other than `0`). Also note the use of `$KRILL_ARCH` to differentiate the output files.
 
 #### `[mod.<MOD_PLUGIN>.<MOD_FUNCTION>]`
 
 This section defines mods to run after the main section. These sections are intended to modify the built binary in any number of ways while tracking a history of the file for future reference. The input and output files must be set here to allow the file tracking. The names can utilize a few variables that KrillBuild will insert, such as `KRILL_ARCH`. The mod plugins' name and function are set in the section title, with the options set in the `option` key.
+
+### Adding Variations
+
+Slightly different builds of the same main section can be created using variations. To create a variation, you still set a `[main]` section as usual, however, you add `[main.<VARIATION>]` sections. These variation have a few set keys, documented below. Any key not defined below is replace the string `%FIELD%` in the `[main]` section's command list. For example, the key `ARGS` will replace the value `%ARGS%` in the `[main]` section commands.
+
+- `archlist`: List of architectures the variation is limited to.
 
 ### Running a Build
 
@@ -247,9 +267,3 @@ Alternate INI files can be set with `-p <FILE>` argument.
 ### Custom Plugins
 
 KrillBuild INI files can configure a path to custom plugin Python (`.py`) file by setting the `path` value in the `[krill]` section. 
-
-### Adding Variations
-
-Slightly different builds of the same main section can be created using variations. To create a variation, you still set a `[main]` section as usual, however, you add `[main.<VARIATION>]` sections. These variation have a few set keys, documented below. Any key not defined below is replace the string `%FIELD%` in the `[main]` section's command list. For example, the key `ARGS` will replace the value `%ARGS` in the `[main]` section commands.
-
-- `archlist`: List of architectures the variation is limited to.

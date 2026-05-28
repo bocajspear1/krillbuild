@@ -2,11 +2,11 @@ from krillbuild.base import DevEnvBase
 
 DOCKER_TEMPLATE=r"""FROM alpine:latest
 
-RUN apk add -U wget clang lld
+RUN apk add -U wget
 
 RUN mkdir -p /opt/toolchain && \
-wget https://github.com/bocajspear1/static-toolchains/releases/download/latest/$TUPLE$-musl-toolchain.tar.gz  -O /tmp/toolchain.tar.gz && \
-tar -zxvf /tmp/toolchain.tar.gz -C /opt/toolchain
+wget https://github.com/bocajspear1/static-toolchains/releases/download/latest/$ARCH$-ulibc-toolchain.tar.gz -O /tmp/toolchain.tar.gz && \
+tar -zxvf /tmp/toolchain.tar.gz -C /opt/toolchain && mv $ARCH$-buildroot-linux-uclibc_sdk-buildroot/* /opt/toolchain 
 
 RUN echo -e '#!/bin/sh\n/opt/toolchain/bin/$TUPLE$-gcc -L$LIBRARY_PATH "$@"\n' > /bin/crossgcc && \
     chmod +x /bin/crossgcc
@@ -34,57 +34,8 @@ RUN mkdir -p /work
 WORKDIR /work
 """
 
-MINGW32_DOCKER_TEMPLATE=r"""FROM alpine:latest
 
-RUN apk add -U wget i686-mingw-w64-gcc gcc g++
-
-
-RUN echo -e '#!/bin/sh\ni686-w64-mingw32-gcc -L$LIBRARY_PATH "$@"\n' > /bin/crossgcc && \
-    chmod +x /bin/crossgcc
-
-RUN echo -e '#!/bin/sh\ni686-w64-mingw32-g++ -L$LIBRARY_PATH "$@"\n' > /bin/crossg++ && \
-    chmod +x /bin/crossg++
-
-RUN mkdir -p /work
-
-WORKDIR /work
-"""
-
-MINGW64_DOCKER_TEMPLATE=r"""FROM alpine:latest
-
-RUN apk add -U wget mingw-w64-gcc gcc g++
-
-
-RUN echo -e '#!/bin/sh\nx86_64-w64-mingw32-gcc -L$LIBRARY_PATH "$@"\n' > /bin/crossgcc && \
-    chmod +x /bin/crossgcc
-
-RUN echo -e '#!/bin/sh\nx86_64-w64-mingw32-g++ -L$LIBRARY_PATH "$@"\n' > /bin/crossg++ && \
-    chmod +x /bin/crossg++
-
-RUN mkdir -p /work
-
-WORKDIR /work
-"""
-
-MY_ARCH_DOCKERFILE=r"""FROM alpine:latest
-
-RUN apk add -U wget clang lld musl-dev gcc g++
-
-RUN echo -e '#!/bin/sh\ngcc -L$LIBRARY_PATH "$@"\n' > /bin/crossgcc && \
-    chmod +x /bin/crossgcc
-
-RUN echo -e '#!/bin/sh\ng++ -L$LIBRARY_PATH "$@"\n' > /bin/crossg++ && \
-    chmod +x /bin/crossg++
-
-RUN echo -e '#!/bin/sh\nclang -fuse-ld=lld -L$LIBRARY_PATH "$@"\n' > /bin/crossclang && \
-    chmod +x /bin/crossclang
-
-RUN mkdir -p /work
-
-WORKDIR /work
-"""
-
-class MuslCDevEnvPlugin(DevEnvBase):
+class ULibCDevEnvPlugin(DevEnvBase):
     """DevEnv with gcc and clang utilizing static cross-compilation build chains from https://github.com/bocajspear1/static-toolchains.
     These chains are based off of https://github.com/richfelker/musl-cross-make and provide a musl environment that can run
     easily on multiple architectures.
@@ -92,26 +43,11 @@ class MuslCDevEnvPlugin(DevEnvBase):
     """
 
     ARCH_MAP = {
-        "powerpc": {
-            "tuple": "powerpc-linux-musl"
+        "sparc": {
+            "tuple": "sparc"
         },
-        "powerpc64": {
-            "tuple": "powerpc64-linux-musl"
-        },
-        "arm": {
-            "tuple": "arm-linux-musleabi"
-        },
-        "aarch64": {
-            "tuple": "aarch64-linux-musl"
-        },
-        "mipsel": {
-            "tuple": "mipsel-linux-musl"
-        },
-        "mips64": {
-            "tuple": "mips64-linux-musl"
-        },
-        "s390x": {
-            "tuple": "s390x-linux-musl"
+        "sparc64": {
+            "tuple": "sparc64"
         },
     }
 
@@ -141,15 +77,9 @@ class MuslCDevEnvPlugin(DevEnvBase):
 
         arch_tuple = None
         docker_file_content = ""
-        if arch == "x86_64":
-            docker_file_content = MY_ARCH_DOCKERFILE
-        elif arch == "x86-win":
-            docker_file_content = MINGW32_DOCKER_TEMPLATE
-        elif arch == "x86_64-win":
-            docker_file_content = MINGW64_DOCKER_TEMPLATE
-        elif arch in self.ARCH_MAP:
+        if arch in self.ARCH_MAP:
             arch_tuple = self.ARCH_MAP[arch]['tuple']
-            docker_file_content = DOCKER_TEMPLATE.replace("$TUPLE$", arch_tuple)
+            docker_file_content = DOCKER_TEMPLATE.replace("$ARCH$", arch_tuple)
         else:
             raise ValueError("Unsupported arch")
         

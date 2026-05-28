@@ -37,20 +37,26 @@ class KrillBuildMain():
         
         return_list = []
         for variation in self._variations:
-            if arch in variation['archlist']:
+            if arch in variation['archlist'] or len(variation['archlist']) == 0:
                 
                 command_list = self._main_obj.commands
                 new_commands = []
-                for arg in variation['args']:
-                    found = False
-                    arg_val = f"%{arg}%"
-                    for i in range(len(command_list)):
+
+                found_map = {}
+
+                # Loop through commands and replace each argument
+                for i in range(len(command_list)):
+                    new_command = command_list[i]
+                    for arg in variation['args']:
+                        arg_val = f"%{arg}%"
                         if arg_val in command_list[i]:
-                            found = True
-                            new_command = command_list[i].replace(arg_val, variation['args'][arg])
-                            new_command = new_command.replace("$KRILL_VARIATION", variation['name'])
-                            new_commands.append(new_command)
-                    if not found:
+                            found_map[arg] = True
+                            new_command = new_command.replace(arg_val, variation['args'][arg])
+                    new_command = new_command.replace("$KRILL_VARIATION", variation['name'])
+                    new_commands.append(new_command)
+
+                for arg in variation['args']:
+                    if arg not in found_map:
                         raise ValueError("Arg %s not found in any command", arg_val)
 
                 new_obj = KrillBuildObject(self._main_obj.name, self._main_obj.compiler, new_commands, variation=variation['name'])

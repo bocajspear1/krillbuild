@@ -23,5 +23,8 @@ ARCHITECTURE_LIST = (
     "powerpc",
     "powerpc64",
     "powerpcle",
-    "powerpcle_sf"
+    "powerpcle_sf",
+    "s390x",
+    "sparc",
+    "sparc64",
 )

@@ -44,7 +44,7 @@ def main():
     for devenv in devenvs.list_devenvs():
         if devenv.__module__.startswith("custom."):
             continue
-        output += f"##{devenv.shortname}\n\n"
+        output += f"## {devenv.shortname}\n\n"
         output += f"{devenv.__doc__}\n\n"
         # print(devenv)
 
